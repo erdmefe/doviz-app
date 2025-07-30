@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   StyleSheet,
@@ -191,6 +192,7 @@ const CalculatorKeyboard: React.FC<CalculatorKeyboardProps> = ({
   isDarkMode,
   display,
 }) => {
+  const { t } = useTranslation();
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#1C1C1E' : '#F2F2F7' }]}>
       {/* Display */}
@@ -355,7 +357,7 @@ const CalculatorKeyboard: React.FC<CalculatorKeyboardProps> = ({
           isDarkMode={isDarkMode}
         />
         <Key
-          value="Onayla"
+          value={t('calculator.confirm')}
           onPress={onConfirm}
           type="confirm"
           flex={2}

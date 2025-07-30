@@ -18,6 +18,7 @@ export default {
       supportsTablet: true
     },
     android: {
+      package: "com.anonymous.dovizapp",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"

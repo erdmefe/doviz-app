@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import './src/i18n';
+import { useTranslation } from 'react-i18next';
 import {
   SafeAreaView,
   StyleSheet,
@@ -406,6 +408,7 @@ const CurrencyDropdown: React.FC<{
 };
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   // Environment initialization
   React.useEffect(() => {
     try {
@@ -429,6 +432,7 @@ export default function App() {
   const systemColorScheme = useColorScheme();
   const [showToast, setShowToast] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [calculatorEnabled, setCalculatorEnabled] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error', message: string, visible: boolean } | null>(null);
@@ -436,6 +440,9 @@ export default function App() {
   const [selectedConversion, setSelectedConversion] = useState<ConversionHistory | null>(null);
   const [showChartModal, setShowChartModal] = useState(false);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [language, setLanguage] = useState(i18n.language || 'tr');
+  const [showWidgets, setShowWidgets] = useState(true);
 
   // Calculator hook - artık otomatik olarak miktar alanını güncellemez
   const calculator = useCalculator();
@@ -471,6 +478,10 @@ export default function App() {
   useEffect(() => {
     loadHistory();
   }, []);
+
+  useEffect(() => {
+    i18n.changeLanguage(language);
+  }, [language, i18n]);
 
   useEffect(() => {
     setResult(null);
@@ -840,7 +851,7 @@ export default function App() {
             <View style={styles.headerContainer}>
               <View style={styles.titleContainer}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
-                  {config.APP_NAME}
+                  {t('currency.converter')}
                 </Text>
                 {isDebugMode() && (
                   <Text style={[styles.debugInfo, { color: theme.colors.textSecondary }]}>
@@ -849,6 +860,14 @@ export default function App() {
                 )}
               </View>
               <View style={styles.themeContainer}>
+                <IconButton
+                  icon="cog"
+                  size={24}
+                  iconColor={theme.colors.text}
+                  onPress={() => setShowSettings(true)}
+                  style={styles.settingsButton}
+                  accessibilityLabel={t('settings.title')}
+                />
                 <ThemeSwitch
                   value={isDarkMode}
                   onValueChange={setIsDarkMode}
@@ -875,8 +894,11 @@ export default function App() {
                   onChangeText={handleAmountChange}
                   onFocus={() => {
                     setIsInputFocused(true);
-                    setShowCalculator(true);
-                    Keyboard.dismiss();
+                    if (calculatorEnabled) {
+                      setShowCalculator(true);
+                      Keyboard.dismiss();
+                    }
+                    // When calculator is disabled, let native keyboard open normally
                   }}
                   onBlur={() => {
                     setIsInputFocused(false);
@@ -884,7 +906,7 @@ export default function App() {
                   placeholder="0,00"
                   placeholderTextColor={theme.colors.textSecondary}
                   mode="outlined"
-                  label="Miktar"
+                  label={t('calculator.amount')}
                   outlineColor={theme.colors.border}
                   activeOutlineColor={theme.colors.primary}
                   textColor={theme.colors.text}
@@ -899,7 +921,7 @@ export default function App() {
                       style={styles.clearIcon}
                       color={theme.colors.textSecondary}
                     />
-                  ) : (
+                  ) : calculatorEnabled ? (
                     <TextInput.Icon
                       icon="calculator"
                       onPress={() => {
@@ -911,7 +933,7 @@ export default function App() {
                       style={styles.clearIcon}
                       color={theme.colors.primary}
                     />
-                  )}
+                  ) : null}
                 />
                 <View style={styles.currencySelector}>
                   <CurrencyDropdown
@@ -967,7 +989,7 @@ export default function App() {
                   placeholder="0,00"
                   placeholderTextColor={theme.colors.textSecondary}
                   mode="outlined"
-                  label="Sonuç"
+                  label={t('calculator.result')}
                   outlineColor={theme.colors.border}
                   activeOutlineColor={theme.colors.primary}
                   textColor={theme.colors.text}
@@ -1039,7 +1061,7 @@ export default function App() {
                 ) : (
                   <>
                     <IconButton icon="arrow-right" size={18} iconColor="#fff" style={{ margin: 0, marginRight: 2, padding: 0 }} />
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 6, letterSpacing: 0.1 }}>Dönüştür</Text>
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 6, letterSpacing: 0.1 }}>{t('calculator.convert')}</Text>
                   </>
                 )}
               </Pressable>
@@ -1049,7 +1071,7 @@ export default function App() {
           <View style={styles.historyContainer}>
             <View style={styles.historyHeader}>
               <Text style={[styles.historyTitle, { color: theme.colors.text }]}>
-                Conversion History
+                {t('currency.history')}
               </Text>
               <IconButton
                 icon="delete"
@@ -1126,18 +1148,20 @@ export default function App() {
                           </Card.Content>
                         </View>
                       </TouchableOpacity>
-                      <ConversionChart
-                        expanded={expandedCardId === item.id}
-                        onToggle={() => {
-                          if (expandedCardId === item.id) {
-                            setExpandedCardId(null);
-                          } else {
-                            setExpandedCardId(item.id);
-                          }
-                        }}
-                        conversionData={item}
-                        theme={theme}
-                      />
+                      {showWidgets && (
+                        <ConversionChart
+                          expanded={expandedCardId === item.id}
+                          onToggle={() => {
+                            if (expandedCardId === item.id) {
+                              setExpandedCardId(null);
+                            } else {
+                              setExpandedCardId(item.id);
+                            }
+                          }}
+                          conversionData={item}
+                          theme={theme}
+                        />
+                      )}
                     </View>
                   </Animated.View>
                 ))}
@@ -1148,19 +1172,108 @@ export default function App() {
 
         <Portal>
           <Dialog visible={showClearDialog} onDismiss={() => setShowClearDialog(false)}>
-            <Dialog.Title>Geçmişi Temizle</Dialog.Title>
+            <Dialog.Title>{t('currency.clearHistoryTitle')}</Dialog.Title>
             <Dialog.Content>
-              <Text>Tüm dönüşüm geçmişini silmek istediğinizden emin misiniz?</Text>
+              <Text>{t('currency.clearHistoryConfirm')}</Text>
             </Dialog.Content>
             <Dialog.Actions>
-              <Button onPress={() => setShowClearDialog(false)}>İptal</Button>
-              <Button onPress={handleClearHistory}>Temizle</Button>
+              <Button onPress={() => setShowClearDialog(false)}>{t('currency.cancel')}</Button>
+              <Button onPress={handleClearHistory}>{t('currency.clear')}</Button>
+            </Dialog.Actions>
+          </Dialog>
+
+          <Dialog visible={showSettings} onDismiss={() => setShowSettings(false)} style={styles.settingsDialog}>
+            <Dialog.Title>{t('settings.title')}</Dialog.Title>
+            <Dialog.Content>
+              <View style={styles.settingsSection}>
+                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.languageSettings')}</Text>
+                <TouchableRipple
+                  onPress={() => {
+                    const newLanguage = language === 'tr' ? 'en' : 'tr';
+                    setLanguage(newLanguage);
+                    setToastMessage({
+                      type: 'success',
+                      message: t('settings.languageChanged'),
+                      visible: true
+                    });
+                  }}
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  <View style={styles.settingsRow}>
+                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
+                      {language === 'tr' ? 'Türkçe' : 'English'}
+                    </Text>
+                    <IconButton
+                      icon="chevron-right"
+                      size={20}
+                      iconColor={theme.colors.textSecondary}
+                    />
+                  </View>
+                </TouchableRipple>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.widgetSettings')}</Text>
+                <TouchableRipple
+                  onPress={() => {
+                    const newShowWidgets = !showWidgets;
+                    setShowWidgets(newShowWidgets);
+                    setToastMessage({
+                      type: 'success',
+                      message: newShowWidgets ? t('settings.widgetShown') : t('settings.widgetHidden'),
+                      visible: true
+                    });
+                  }}
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  <View style={styles.settingsRow}>
+                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
+                      {showWidgets ? t('settings.hideWidget') : t('settings.showWidget')}
+                    </Text>
+                    <View style={[styles.switchContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
+                      <View style={[styles.switchToggle, { 
+                        transform: [{ translateX: showWidgets ? 20 : 4 }],
+                        backgroundColor: showWidgets ? theme.colors.primary : theme.colors.border
+                      }]} />
+                    </View>
+                  </View>
+                </TouchableRipple>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.calculatorSettings')}</Text>
+                <TouchableRipple
+                  onPress={() => {
+                    const newCalculatorEnabled = !calculatorEnabled;
+                    setCalculatorEnabled(newCalculatorEnabled);
+                    setToastMessage({
+                      type: 'success',
+                      message: newCalculatorEnabled ? t('settings.calculatorShown') : t('settings.calculatorHidden'),
+                      visible: true
+                    });
+                  }}
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  <View style={styles.settingsRow}>
+                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
+                      {calculatorEnabled ? t('settings.hideCalculator') : t('settings.showCalculator')}
+                    </Text>
+                    <View style={[styles.switchContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
+                      <View style={[styles.switchToggle, { 
+                        transform: [{ translateX: calculatorEnabled ? 20 : 4 }],
+                        backgroundColor: calculatorEnabled ? theme.colors.primary : theme.colors.border
+                      }]} />
+                    </View>
+                  </View>
+                </TouchableRipple>
+              </View>
+
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setShowSettings(false)}>{t('common.close')}</Button>
             </Dialog.Actions>
           </Dialog>
         </Portal>
 
         {/* Calculator Keyboard Overlay */}
-        {showCalculator && (
+        {calculatorEnabled && showCalculator && (
           <View style={styles.calculatorOverlay}>
             <TouchableWithoutFeedback onPress={() => setShowCalculator(false)}>
               <View style={styles.calculatorBackdrop} />
@@ -1183,7 +1296,7 @@ export default function App() {
                 }
               ]}>
                 <Text style={[styles.calculatorTitle, { color: theme.colors.text }]}>
-                  Hesap Makinesi
+                  {t('calculator.title')}
                 </Text>
                 <IconButton
                   icon="close"
@@ -1213,7 +1326,7 @@ export default function App() {
           onDismiss={() => setError(null)}
           duration={3000}
           action={{
-            label: 'Kapat',
+            label: t('common.close'),
             onPress: () => {
               setError(null);
             },
@@ -1676,7 +1789,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
     borderBottomWidth: 1,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -1684,5 +1796,60 @@ const styles = StyleSheet.create({
   calculatorTitle: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  settingsButton: {
+    marginRight: 8,
+  },
+  settingsDialog: {
+    width: 400,
+    alignSelf: 'center',
+  },
+  settingsSection: {
+    marginBottom: 20,
+  },
+  settingsLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  settingsItem: {
+    borderRadius: 12,
+    marginVertical: 4,
+    overflow: 'hidden',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  settingsText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  switchContainer: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchToggle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    position: 'absolute',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
 });
