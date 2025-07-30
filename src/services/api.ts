@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { ExchangeRateResponse } from '../types';
 import moment from 'moment';
+import { config, isTestMode, isDebugMode } from '../config/env';
 
-// ExchangeRate-API Integration
-const API_KEY = 'aca8fff2224a7a95db5647bd';
-const BASE_URL = 'https://v6.exchangerate-api.com/v6';
+// Environment variables'dan API konfigürasyonu
+const API_KEY = config.API_KEY;
+const BASE_URL = config.BASE_URL;
 
-// Test modu aktif/pasif
-const TEST_MODE = true;
+// Test modu environment'dan alınıyor
+const TEST_MODE = isTestMode();
 
 // Sabit döviz kurları (test için)
 const BASE_RATES: { [key: string]: { [key: string]: number } } = {
@@ -69,13 +70,28 @@ const calculateTestRate = (from: string, to: string): number => {
 
 export const fetchExchangeRates = async (baseCurrency: string): Promise<ExchangeRateResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/${API_KEY}/latest/${baseCurrency}`);
-    
+    if (!API_KEY && !TEST_MODE) {
+      throw new Error('API anahtarı tanımlanmamış');
+    }
+
+    const url = `${BASE_URL}/${API_KEY}/latest/${baseCurrency}`;
+
+    if (isDebugMode()) {
+      console.log('API Request URL:', url.replace(API_KEY, '***API_KEY***'));
+    }
+
+    const response = await fetch(url);
+
     if (!response.ok) {
-      throw new Error('Döviz kurları alınamadı');
+      throw new Error(`API Hatası: ${response.status} - ${response.statusText}`);
     }
 
     const data = await response.json();
+
+    if (isDebugMode()) {
+      console.log('API Response:', data);
+    }
+
     return data;
   } catch (error) {
     console.error('Döviz kuru API hatası:', error);
@@ -85,20 +101,38 @@ export const fetchExchangeRates = async (baseCurrency: string): Promise<Exchange
 
 export const convertCurrency = async (
 amount: number, fromCurrency: string, toCurrency: string, date: moment.Moment): Promise<number> => {
-  try {    if (TEST_MODE) {
-      // Test modunda yapay gecikme ekleyelim
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const rate = calculateTestRate(fromCurrency, toCurrency);
-      return Number((amount * rate).toFixed(2));
+  try {
+    if (isDebugMode()) {
+      console.log(`Converting ${amount} ${fromCurrency} to ${toCurrency} (Test Mode: ${TEST_MODE})`);
     }
 
-    // Normal API çağrısı (şu an devre dışı)
+    if (TEST_MODE) {
+      // Test modunda yapay gecikme ekleyelim
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const rate = calculateTestRate(fromCurrency, toCurrency);
+      const result = Number((amount * rate).toFixed(2));
+
+      if (isDebugMode()) {
+        console.log(`Test conversion: ${amount} ${fromCurrency} = ${result} ${toCurrency} (rate: ${rate})`);
+      }
+
+      return result;
+    }
+
+    // Normal API çağrısı
     const response = await fetchExchangeRates(fromCurrency);
     if (!response.conversion_rates || !response.conversion_rates[toCurrency]) {
       throw new Error('Dönüşüm oranı bulunamadı');
     }
-    return Number((amount * response.conversion_rates[toCurrency]).toFixed(2));
+
+    const result = Number((amount * response.conversion_rates[toCurrency]).toFixed(2));
+
+    if (isDebugMode()) {
+      console.log(`API conversion: ${amount} ${fromCurrency} = ${result} ${toCurrency}`);
+    }
+
+    return result;
   } catch (error) {
     console.error('Dönüşüm hatası:', error);
     throw error;
@@ -109,12 +143,24 @@ export const getAvailableCurrencies = async (): Promise<string[]> => {
   if (TEST_MODE) {
     // Test modunda yapay gecikme ekleyelim
     await new Promise(resolve => setTimeout(resolve, 300));
-    return Object.keys(BASE_RATES);
+    const currencies = Object.keys(BASE_RATES);
+
+    if (isDebugMode()) {
+      console.log('Available currencies (Test Mode):', currencies);
+    }
+
+    return currencies;
   }
 
   try {
     const response = await fetchExchangeRates('USD');
-    return Object.keys(response.conversion_rates);
+    const currencies = Object.keys(response.conversion_rates);
+
+    if (isDebugMode()) {
+      console.log('Available currencies (API):', currencies.length, 'currencies');
+    }
+
+    return currencies;
   } catch (error) {
     console.error('Para birimleri alınamadı:', error);
     throw error;

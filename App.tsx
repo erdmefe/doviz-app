@@ -56,6 +56,11 @@ import { saveConversion, getHistory, clearHistory, getFavoriteCurrencies, toggle
 import { getAvailableCurrencies } from './src/services/api';
 import { currencyNames } from './src/data/currencyData';
 import ConversionChart from './src/components/ConversionChart';
+import CalculatorKeyboard from './src/components/CalculatorKeyboard';
+import { useCalculator } from './src/hooks/useCalculator';
+import { config, isDebugMode, isTestMode } from './src/config/env';
+import { initializeEnvironment } from './src/utils/environment';
+import moment from 'moment';
 
 interface ToastProps {
   visible: boolean;
@@ -401,6 +406,15 @@ const CurrencyDropdown: React.FC<{
 };
 
 export default function App() {
+  // Environment initialization
+  React.useEffect(() => {
+    try {
+      initializeEnvironment();
+    } catch (error) {
+      console.error('Environment initialization failed:', error);
+    }
+  }, []);
+
   const [amount, setAmount] = useState('');
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('TRY');
@@ -414,12 +428,26 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const systemColorScheme = useColorScheme();
   const [showToast, setShowToast] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error', message: string, visible: boolean } | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [selectedConversion, setSelectedConversion] = useState<ConversionHistory | null>(null);
   const [showChartModal, setShowChartModal] = useState(false);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
+  // Calculator hook - artık otomatik olarak miktar alanını güncellemez
+  const calculator = useCalculator();
+
+  // Hesap makinesi onay fonksiyonu
+  const handleCalculatorConfirm = () => {
+    if (calculator.display && calculator.display !== '') {
+      setAmount(calculator.display);
+      setResult(null);
+      setShowCalculator(false);
+    }
+  };
 
   const theme = {
     ...(isDarkMode ? MD3DarkTheme : MD3LightTheme),
@@ -672,6 +700,7 @@ export default function App() {
         numericAmount,
         fromCurrency,
         toCurrency,
+        moment()
       );
       setResult(convertedAmount);
 
@@ -809,9 +838,16 @@ export default function App() {
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.headerContainer}>
-              <Text style={[styles.title, { color: theme.colors.text }]}>
-                Döviz Çevirici
-              </Text>
+              <View style={styles.titleContainer}>
+                <Text style={[styles.title, { color: theme.colors.text }]}>
+                  {config.APP_NAME}
+                </Text>
+                {isDebugMode() && (
+                  <Text style={[styles.debugInfo, { color: theme.colors.textSecondary }]}>
+                    v{config.APP_VERSION} • {isTestMode() ? 'Test' : 'Live'} Mode
+                  </Text>
+                )}
+              </View>
               <View style={styles.themeContainer}>
                 <ThemeSwitch
                   value={isDarkMode}
@@ -837,6 +873,14 @@ export default function App() {
                   keyboardType="numeric"
                   value={amount}
                   onChangeText={handleAmountChange}
+                  onFocus={() => {
+                    setIsInputFocused(true);
+                    setShowCalculator(true);
+                    Keyboard.dismiss();
+                  }}
+                  onBlur={() => {
+                    setIsInputFocused(false);
+                  }}
                   placeholder="0,00"
                   placeholderTextColor={theme.colors.textSecondary}
                   mode="outlined"
@@ -850,11 +894,24 @@ export default function App() {
                       onPress={() => {
                         setAmount('');
                         setResult(null);
+                        calculator.handleClear();
                       }}
                       style={styles.clearIcon}
                       color={theme.colors.textSecondary}
                     />
-                  ) : null}
+                  ) : (
+                    <TextInput.Icon
+                      icon="calculator"
+                      onPress={() => {
+                        setShowCalculator(!showCalculator);
+                        if (!showCalculator) {
+                          Keyboard.dismiss();
+                        }
+                      }}
+                      style={styles.clearIcon}
+                      color={theme.colors.primary}
+                    />
+                  )}
                 />
                 <View style={styles.currencySelector}>
                   <CurrencyDropdown
@@ -1102,6 +1159,55 @@ export default function App() {
           </Dialog>
         </Portal>
 
+        {/* Calculator Keyboard Overlay */}
+        {showCalculator && (
+          <View style={styles.calculatorOverlay}>
+            <TouchableWithoutFeedback onPress={() => setShowCalculator(false)}>
+              <View style={styles.calculatorBackdrop} />
+            </TouchableWithoutFeedback>
+
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              style={[
+                styles.calculatorContainer,
+                {
+                  backgroundColor: theme.colors.surface,
+                }
+              ]}
+            >
+              <View style={[
+                styles.calculatorHeader,
+                {
+                  borderBottomColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                }
+              ]}>
+                <Text style={[styles.calculatorTitle, { color: theme.colors.text }]}>
+                  Hesap Makinesi
+                </Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowCalculator(false)}
+                  iconColor={theme.colors.text}
+                />
+              </View>
+              <CalculatorKeyboard
+                onNumberPress={calculator.handleNumber}
+                onOperatorPress={calculator.handleOperator}
+                onClear={calculator.handleClear}
+                onBackspace={calculator.handleBackspace}
+                onEquals={calculator.handleEquals}
+                onDecimal={calculator.handleDecimal}
+                onConfirm={handleCalculatorConfirm}
+                theme={theme}
+                isDarkMode={isDarkMode}
+                display={calculator.display}
+              />
+            </Animated.View>
+          </View>
+        )}
+
         <Snackbar
           visible={!!error}
           onDismiss={() => setError(null)}
@@ -1152,9 +1258,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  titleContainer: {
+    flex: 1,
+  },
   title: {
     fontSize: 24,
     fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
+  },
+  debugInfo: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.8,
   },
   themeContainer: {
     flexDirection: 'row',
@@ -1505,5 +1619,70 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(180,180,180,0.25)',
     borderRadius: 12,
     zIndex: 2,
+  },
+  calculatorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    justifyContent: 'flex-end',
+  },
+  calculatorBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  calculatorContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  calculatorModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  calculatorModalBackdrop: {
+    flex: 1,
+  },
+  calculatorModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  calculatorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  calculatorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
