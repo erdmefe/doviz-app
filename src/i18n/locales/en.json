@@ -32,8 +32,8 @@
     "languageSettings": "Language Selection",
     "widgetSettings": "Widget Management",
     "calculatorSettings": "Calculator",
-    "showWidget": "Show Graphic Widget",
-    "hideWidget": "Hide Graphic Widget",
+    "showWidget": "Show Chart",
+    "hideWidget": "Hide Chart",
     "showCalculator": "Show Calculator",
     "hideCalculator": "Hide Calculator",
     "languageChanged": "Language changed to English",
@@ -41,7 +41,10 @@
     "widgetHidden": "Widget is now hidden",
     "calculatorShown": "Calculator is now shown",
     "calculatorHidden": "Calculator is now hidden",
-    "settingsSaved": "Settings saved"
+    "settingsSaved": "Settings saved",
+    "languageDescription": "Change app language",
+    "widgetDescription": "Show currency charts on main screen",
+    "calculatorDescription": "Advanced calculator feature"
   },
   "calculator": {
     "title": "Calculator",

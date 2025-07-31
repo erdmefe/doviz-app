@@ -3,7 +3,8 @@ import { View, StyleSheet, Dimensions, ScrollView, TouchableOpacity, ActivityInd
 import { Text, IconButton } from 'react-native-paper';
 import { LineChart } from 'react-native-chart-kit';
 import moment from 'moment';
-import { convertCurrency } from '../services/api';
+import { convertCurrency, fetchHistoricalRates as fetchHistoricalRatesAPI } from '../services/api';
+import { isTestMode } from '../config/env';
 
 interface ConversionChartProps {
   expanded: boolean;
@@ -29,11 +30,11 @@ interface ChartData {
 }
 
 const TIME_RANGES = [
-  { label: '1 Hafta', days: 7 },
-  { label: '1 Ay', days: 30 },
-  { label: '3 Ay', days: 90 },
-  { label: '6 Ay', days: 180 },
-  { label: '1 Yıl', days: 365 },
+  { label: '1W', days: 7 },
+  { label: '1M', days: 30 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: '1Y', days: 365 },
 ];
 
 const ConversionChart: React.FC<ConversionChartProps> = ({
@@ -47,7 +48,7 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [animation] = useState(new Animated.Value(0));
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, visible: false, value: 0 });
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, visible: false, value: 0, date: '' });
 
   useEffect(() => {
     Animated.timing(animation, {
@@ -62,52 +63,81 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
     outputRange: [0, 260],
   });
 
-  const generateDates = (days: number) => {
-    const dates = [];
-    const today = moment();
-    
-    // 1 haftalık veri için günlük, diğerleri için uygun aralıklar
-    const interval = days <= 7 ? 1 : Math.ceil(days / 6);
-    
-    for (let i = days; i >= 0; i -= interval) {
-      dates.push(today.clone().subtract(i, 'days'));
-    }
-    return dates;
-  };
-
   const fetchHistoricalRates = async () => {
     if (!expanded) return;
     
     setLoading(true);
     setError(null);
     try {
-      const dates = generateDates(selectedRange.days);
-      const rates = await Promise.all(
-        dates.map(async (date) => {
-          const result = await convertCurrency(
-            conversionData.amount,
-            conversionData.fromCurrency,
-            conversionData.toCurrency,
-            date,
-          );
-          return result;
-        })
+      const historicalData = await fetchHistoricalRatesAPI(
+        conversionData.fromCurrency,
+        conversionData.toCurrency,
+        selectedRange.days
       );
 
+      if (!historicalData || historicalData.length === 0) {
+        throw new Error('Geçmiş veri bulunamadı');
+      }
+
+      // Verileri chart formatına dönüştür - 7 veri noktası için etiketler
+      const labels = historicalData.map((item, index) => {
+        const date = moment(item.date);
+        // Kısa etiketler: 7 veri noktası için
+        if (selectedRange.days <= 7) {
+          return date.format('DD/MM');
+        } else if (selectedRange.days <= 30) {
+          return date.format('MM/DD');
+        } else if (selectedRange.days <= 90) {
+          return date.format('MM/YY');
+        } else {
+          return date.format('MM/YY');
+        }
+      });
+      
+      const rates = historicalData.map(item => {
+        const rate = Number((conversionData.amount * item.rate).toFixed(2));
+        // Geçersiz değerleri kontrol et (NaN, Infinity, 0)
+        if (isNaN(rate) || !isFinite(rate) || rate <= 0) {
+          return conversionData.amount > 0 ? conversionData.amount : 1.0; // Güvenli varsayılan değer
+        }
+        return Math.max(0.01, rate); // Minimum değer sınırı
+      });
+
+      // Tüm değerler geçerli mi kontrol et
+      const validRates = rates.filter(rate => isFinite(rate));
+      if (validRates.length === 0) {
+        throw new Error('Geçerli veri bulunamadı');
+      }
+
+      // Chart için verileri normalize et - Infinity değerlerini önle
+      const minRate = Math.min(...validRates);
+      const maxRate = Math.max(...validRates);
+      
+      // Eğer tüm değerler aynıysa, küçük bir dalgalanma ekle
+      let normalizedRates = rates;
+      if (maxRate === minRate) {
+        normalizedRates = rates.map((rate, index) => 
+          rate + (Math.random() - 0.5) * 0.01 * rate
+        );
+      }
+
       const newChartData = {
-        labels: dates.map(date => date.format('DD/MM')),
+        labels: labels,
         datasets: [{
-          data: rates,
+          data: normalizedRates,
           color: (opacity = 1) => theme.colors.primary,
           strokeWidth: 2
         }],
-        legend: [`${conversionData.fromCurrency} to ${conversionData.toCurrency}`]
+        legend: [`${conversionData.fromCurrency} → ${conversionData.toCurrency}`]
       };
       
       setChartData(newChartData);
     } catch (error) {
       console.error('Geçmiş kurlar yüklenirken hata:', error);
-      setError('Geçmiş kurlar yüklenirken bir hata oluştu');
+      const errorMessage = typeof error === 'object' && error !== null && 'message' in error && (error as any).message.includes('test')
+        ? 'Test modunda yapay veri kullanılıyor. Gerçek veri için API anahtarınızı kontrol edin.'
+        : 'Geçmiş kurlar yüklenirken bir hata oluştu. Lütfen internet bağlantınızı kontrol edin.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -138,27 +168,32 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
         paddingLeft: 0,
       },
       propsForDots: {
-        r: '5',
+        r: '4',
         strokeWidth: '2',
         stroke: theme.colors.primary,
         fill: theme.colors.surface,
       },
       propsForBackgroundLines: {
         strokeWidth: 0.5,
-        stroke: theme.colors.text + '10',
+        stroke: theme.colors.text + '20',
       },
       formatYLabel: (value: string) => {
         const num = Number(value);
-        if (num >= 1000) {
+        if (!isFinite(num)) {
+          return '0.00'; // Geçersiz değer için güvenli fallback
+        }
+        if (num >= 1000000) {
+          return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
           return (num / 1000).toFixed(1) + 'K';
         }
-        return num.toFixed(1);
+        return num.toFixed(2);
       },
       propsForVerticalLabels: {
-        fontSize: 10,
+        fontSize: 9,
       },
       propsForHorizontalLabels: {
-        fontSize: 10,
+        fontSize: 9,
       },
       yAxisSuffix: '',
       yAxisInterval: 1,
@@ -166,6 +201,18 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
     };
 
     try {
+      // Chart için güvenli veri aralığı belirle
+      const safeData = chartData.datasets[0].data.filter(val => isFinite(val));
+      if (safeData.length === 0) {
+        return (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: theme.colors.error }]}>
+              Geçerli veri bulunamadı
+            </Text>
+          </View>
+        );
+      }
+      
       return (
         <View style={styles.chartWrapper}>
           <LineChart
@@ -181,22 +228,25 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
             withOuterLines={true}
             withVerticalLines={true}
             withHorizontalLines={true}
-            fromZero={false}
+            fromZero={true} // 0'dan başla, negatif değerleri önle
             segments={3}
             yAxisInterval={1}
             getDotColor={() => theme.colors.primary}
-            onDataPointClick={({ value, x, y, getColor }) => {
+            onDataPointClick={({ value, x, y, getColor, index }) => {
+              if (!isFinite(value)) return; // Geçersiz değerleri işleme
+              const date = chartData.labels[index];
               setTooltipPos({
                 x: x,
                 y: y,
                 value: value,
+                date: date,
                 visible: true,
               });
 
-              // Hide tooltip after 2 seconds
+              // Hide tooltip after 3 seconds
               setTimeout(() => {
                 setTooltipPos(prev => ({ ...prev, visible: false }));
-              }, 2000);
+              }, 3000);
             }}
             renderDotContent={({ x, y, index }) => {
               return (
@@ -211,16 +261,18 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
                   ]}
                   onPress={() => {
                     const value = chartData.datasets[0].data[index];
+                    const date = chartData.labels[index];
                     setTooltipPos({
                       x: x,
                       y: y,
                       value: value,
+                      date: date,
                       visible: true,
                     });
 
                     setTimeout(() => {
                       setTooltipPos(prev => ({ ...prev, visible: false }));
-                    }, 2000);
+                    }, 3000);
                   }}
                 />
               );
@@ -233,17 +285,25 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
                   styles.tooltipContainer,
                   {
                     position: 'absolute',
-                    left: tooltipPos.x - 40,
-                    top: tooltipPos.y - 35,
+                    left: tooltipPos.x - 45,
+                    top: tooltipPos.y - 50,
                     backgroundColor: theme.colors.surface,
                     borderColor: theme.colors.primary,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 3.84,
+                    elevation: 5,
                   }
                 ]}>
-                  <Text style={[styles.tooltipText, { color: theme.colors.text }]}>
-                    {tooltipPos.value.toLocaleString('tr-TR', {
+                  <Text style={[styles.tooltipText, { color: theme.colors.text, fontWeight: 'bold', fontSize: 12 }]}>
+                    {tooltipPos.date}
+                  </Text>
+                  <Text style={[styles.tooltipText, { color: theme.colors.primary, fontWeight: 'bold', fontSize: 14, marginTop: 2 }]}>
+                    {isFinite(tooltipPos.value) ? tooltipPos.value.toLocaleString('tr-TR', {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
-                    })}
+                    }) : '0.00'}
                   </Text>
                 </View>
               );
@@ -266,10 +326,10 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
   const renderContent = () => {
     if (loading) {
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
+        <View style={[styles.loadingContainer, { backgroundColor: theme.colors.surface }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-            Yükleniyor...
+            Grafik yükleniyor...
           </Text>
         </View>
       );
@@ -277,8 +337,10 @@ const ConversionChart: React.FC<ConversionChartProps> = ({
 
     if (error) {
       return (
-        <View style={styles.errorContainer}>
-          <Text style={{ color: theme.colors.error }}>{error}</Text>
+        <View style={[styles.errorContainer, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.errorText, { color: theme.colors.error }]}>
+            {error}
+          </Text>
         </View>
       );
     }
@@ -353,6 +415,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginHorizontal: 20,
+  },
+  testModeText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   chartContent: {
     paddingTop: 12,
     paddingBottom: 12,
@@ -409,11 +482,12 @@ const styles = StyleSheet.create({
   },
   tooltipContainer: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
-    minWidth: 80,
+    minWidth: 100,
     alignItems: 'center',
-    backgroundColor: 'white'
+    backgroundColor: 'white',
+    zIndex: 1000,
   },
   tooltipText: {
     fontSize: 12,
@@ -429,4 +503,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ConversionChart; 
+export default ConversionChart;

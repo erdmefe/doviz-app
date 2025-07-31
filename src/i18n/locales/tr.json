@@ -32,8 +32,8 @@
     "languageSettings": "Dil Seçimi",
     "widgetSettings": "Widget Yönetimi",
     "calculatorSettings": "Hesap Makinesi",
-    "showWidget": "Grafik Widget'ını Göster",
-    "hideWidget": "Grafik Widget'ını Gizle",
+    "showWidget": "Grafiği Göster",
+    "hideWidget": "Grafiği Gizle",
     "showCalculator": "Hesap Makinesini Göster",
     "hideCalculator": "Hesap Makinesini Gizle",
     "languageChanged": "Dil Türkçe olarak değiştirildi",
@@ -41,7 +41,10 @@
     "widgetHidden": "Widget gizlendi",
     "calculatorShown": "Hesap makinesi gösteriliyor",
     "calculatorHidden": "Hesap makinesi gizlendi",
-    "settingsSaved": "Ayarlar kaydedildi"
+    "settingsSaved": "Ayarlar kaydedildi",
+    "languageDescription": "Uygulama dilini değiştir",
+    "widgetDescription": "Ana ekranda döviz grafiklerini göster",
+    "calculatorDescription": "Gelişmiş hesap makinesi özelliği"
   },
   "calculator": {
     "title": "Hesap Makinesi",

@@ -31,6 +31,7 @@ import Animated, {
   FadeIn,
   FadeInDown,
   FadeInLeft,
+  SlideInDown,
   Layout,
   SharedValue,
   useSharedValue,
@@ -91,8 +92,8 @@ const Toast: React.FC<ToastProps> = ({ visible, message, onHide, type = 'success
   useEffect(() => {
     if (visible) {
       const timer = setTimeout(() => {
-        onHide();
-      }, 3000);
+         onHide();
+      }, 1500);
 
       return () => clearTimeout(timer);
     }
@@ -450,7 +451,37 @@ export default function App() {
   // Hesap makinesi onay fonksiyonu
   const handleCalculatorConfirm = () => {
     if (calculator.display && calculator.display !== '') {
-      setAmount(calculator.display);
+      // Eğer hesaplama varsa önce sonucu hesapla
+      let finalValue = calculator.display;
+      
+      // Eğer bir işlem varsa, sonucu hesapla
+      if (calculator.previousValue !== null && calculator.operation !== null) {
+        const currentValue = parseFloat(calculator.display.replace(/\./g, '').replace(',', '.')) || 0;
+        let result = currentValue;
+        
+        switch (calculator.operation) {
+          case '+':
+            result = calculator.previousValue + currentValue;
+            break;
+          case '−':
+            result = calculator.previousValue - currentValue;
+            break;
+          case '×':
+            result = calculator.previousValue * currentValue;
+            break;
+          case '÷':
+            result = currentValue !== 0 ? calculator.previousValue / currentValue : calculator.previousValue;
+            break;
+        }
+        
+        // Türkiye formatına çevir
+        const parts = result.toString().split('.');
+        const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        const decimalPart = parts[1] ? ',' + parts[1] : '';
+        finalValue = integerPart + decimalPart;
+      }
+      
+      setAmount(finalValue);
       setResult(null);
       setShowCalculator(false);
     }
@@ -838,16 +869,31 @@ export default function App() {
           {/* Converter Container Background */}
           <LinearGradient
             colors={[
-              isDarkMode ? '#1a237e' : '#e3f2fd',
+              isDarkMode ? '#1e1e2e' : '#e3f2fd',
               isDarkMode ? '#121212' : '#ffffff'
             ]}
-            style={[styles.converterContainer]}
+            style={[styles.converterContainer, {
+              backgroundColor: isDarkMode ? 'rgba(30, 30, 46, 0.8)' : 'rgba(255, 255, 255, 0.95)',
+              borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+              ...Platform.select({
+                ios: {
+                  shadowColor: isDarkMode ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.15)',
+                  shadowOffset: { width: 0, height: isDarkMode ? 8 : 6 },
+                  shadowOpacity: isDarkMode ? 0.6 : 0.3,
+                  shadowRadius: isDarkMode ? 16 : 12,
+                },
+                android: {
+                  elevation: isDarkMode ? 16 : 12,
+                },
+              })
+            }]}
           >
             <BlurView
-              intensity={100}
+              intensity={isDarkMode ? 60 : 100}
               tint={isDarkMode ? 'dark' : 'light'}
               style={StyleSheet.absoluteFill}
             />
+            <View style={[styles.swapLine, { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#E0E0E0' }]} />
             <View style={styles.headerContainer}>
               <View style={styles.titleContainer}>
                 <Text style={[styles.title, { color: theme.colors.text }]}>
@@ -1182,11 +1228,16 @@ export default function App() {
             </Dialog.Actions>
           </Dialog>
 
-          <Dialog visible={showSettings} onDismiss={() => setShowSettings(false)} style={styles.settingsDialog}>
-            <Dialog.Title>{t('settings.title')}</Dialog.Title>
-            <Dialog.Content>
+          {showSettings && (
+            <Dialog visible={showSettings} onDismiss={() => setShowSettings(false)} style={styles.settingsDialog} dismissable={true}>
+            <Dialog.Title style={{ fontSize: 22, fontWeight: '700', paddingVertical: 20 }}>
+              {t('settings.title')}
+            </Dialog.Title>
+            <Dialog.Content style={{ paddingHorizontal: 24 }}>
               <View style={styles.settingsSection}>
-                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.languageSettings')}</Text>
+                <Text style={[styles.settingsLabel, { color: theme.colors.textSecondary }]}>
+                  {t('settings.languageSettings')}
+                </Text>
                 <TouchableRipple
                   onPress={() => {
                     const newLanguage = language === 'tr' ? 'en' : 'tr';
@@ -1197,11 +1248,26 @@ export default function App() {
                       visible: true
                     });
                   }}
-                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  borderless={true}
+                  rippleColor="rgba(0, 0, 0, 0.1)"
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface, borderRadius: 16 }]}>
                   <View style={styles.settingsRow}>
-                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
-                      {language === 'tr' ? 'Türkçe' : 'English'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <IconButton
+                        icon="translate"
+                        size={20}
+                        iconColor={theme.colors.primary}
+                        style={{ marginRight: 8, marginLeft: -8 }}
+                      />
+                      <View>
+                        <Text style={[styles.settingsText, { color: theme.colors.text, fontWeight: '600' }]}>
+                          {language === 'tr' ? 'Türkçe' : 'English'}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: -2 }}>
+                          {t('settings.languageDescription')}
+                        </Text>
+                      </View>
+                    </View>
                     <IconButton
                       icon="chevron-right"
                       size={20}
@@ -1212,7 +1278,9 @@ export default function App() {
               </View>
 
               <View style={styles.settingsSection}>
-                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.widgetSettings')}</Text>
+                <Text style={[styles.settingsLabel, { color: theme.colors.textSecondary }]}>
+                  {t('settings.widgetSettings')}
+                </Text>
                 <TouchableRipple
                   onPress={() => {
                     const newShowWidgets = !showWidgets;
@@ -1223,14 +1291,29 @@ export default function App() {
                       visible: true
                     });
                   }}
-                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  borderless={true}
+                  rippleColor="rgba(0, 0, 0, 0.1)"
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface, borderRadius: 16 }]}>
                   <View style={styles.settingsRow}>
-                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
-                      {showWidgets ? t('settings.hideWidget') : t('settings.showWidget')}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <IconButton
+                        icon="chart-line"
+                        size={20}
+                        iconColor={theme.colors.primary}
+                        style={{ marginRight: 8, marginLeft: -8 }}
+                      />
+                      <View>
+                        <Text style={[styles.settingsText, { color: theme.colors.text, fontWeight: '600' }]}>
+                          {showWidgets ? t('settings.hideWidget') : t('settings.showWidget')}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: -2 }}>
+                          {t('settings.widgetDescription')}
+                        </Text>
+                      </View>
+                    </View>
                     <View style={[styles.switchContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
-                      <View style={[styles.switchToggle, { 
-                        transform: [{ translateX: showWidgets ? 20 : 4 }],
+                      <Animated.View style={[styles.switchToggle, { 
+                        transform: [{ translateX: showWidgets ? 22 : 2 }],
                         backgroundColor: showWidgets ? theme.colors.primary : theme.colors.border
                       }]} />
                     </View>
@@ -1239,7 +1322,9 @@ export default function App() {
               </View>
 
               <View style={styles.settingsSection}>
-                <Text style={[styles.settingsLabel, { color: theme.colors.text }]}>{t('settings.calculatorSettings')}</Text>
+                <Text style={[styles.settingsLabel, { color: theme.colors.textSecondary }]}>
+                  {t('settings.calculatorSettings')}
+                </Text>
                 <TouchableRipple
                   onPress={() => {
                     const newCalculatorEnabled = !calculatorEnabled;
@@ -1250,14 +1335,29 @@ export default function App() {
                       visible: true
                     });
                   }}
-                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface }]}>
+                  borderless={true}
+                  rippleColor="rgba(0, 0, 0, 0.1)"
+                  style={[styles.settingsItem, { backgroundColor: theme.colors.surface, borderRadius: 16 }]}>
                   <View style={styles.settingsRow}>
-                    <Text style={[styles.settingsText, { color: theme.colors.text }]}>
-                      {calculatorEnabled ? t('settings.hideCalculator') : t('settings.showCalculator')}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <IconButton
+                        icon="calculator"
+                        size={20}
+                        iconColor={theme.colors.primary}
+                        style={{ marginRight: 8, marginLeft: -8 }}
+                      />
+                      <View>
+                        <Text style={[styles.settingsText, { color: theme.colors.text, fontWeight: '600' }]}>
+                          {calculatorEnabled ? t('settings.hideCalculator') : t('settings.showCalculator')}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: -2 }}>
+                          {t('settings.calculatorDescription')}
+                        </Text>
+                      </View>
+                    </View>
                     <View style={[styles.switchContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
-                      <View style={[styles.switchToggle, { 
-                        transform: [{ translateX: calculatorEnabled ? 20 : 4 }],
+                      <Animated.View style={[styles.switchToggle, { 
+                        transform: [{ translateX: calculatorEnabled ? 22 : 2 }],
                         backgroundColor: calculatorEnabled ? theme.colors.primary : theme.colors.border
                       }]} />
                     </View>
@@ -1266,10 +1366,17 @@ export default function App() {
               </View>
 
             </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setShowSettings(false)}>{t('common.close')}</Button>
+            <Dialog.Actions style={{ paddingHorizontal: 24, paddingVertical: 20 }}>
+              <Button 
+                onPress={() => setShowSettings(false)} 
+                mode="contained"
+                style={{ borderRadius: 12 }}
+              >
+                {t('common.close')}
+              </Button>
             </Dialog.Actions>
           </Dialog>
+          )}
         </Portal>
 
         {/* Calculator Keyboard Overlay */}
@@ -1280,7 +1387,7 @@ export default function App() {
             </TouchableWithoutFeedback>
 
             <Animated.View
-              entering={FadeIn.duration(200)}
+              entering={SlideInDown.duration(250)}
               style={[
                 styles.calculatorContainer,
                 {
@@ -1324,7 +1431,7 @@ export default function App() {
         <Snackbar
           visible={!!error}
           onDismiss={() => setError(null)}
-          duration={3000}
+          duration={1500}
           action={{
             label: t('common.close'),
             onPress: () => {
@@ -1347,40 +1454,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   converterContainer: {
-    padding: 20,
-    borderRadius: 24,
-    margin: 16,
+    padding: 16,
+    borderRadius: 20,
+    margin: 12,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     ...Platform.select({
       ios: {
         shadowColor: 'rgba(0, 0, 0, 0.15)',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 16,
+        elevation: 12,
       },
     }),
     transform: [{ scale: 1 }],
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   titleContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
   },
   debugInfo: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
     opacity: 0.8,
   },
   themeContainer: {
@@ -1394,14 +1503,14 @@ const styles = StyleSheet.create({
   currencyInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     position: 'relative',
     zIndex: 2,
-    marginVertical: 10,
+    marginVertical: 8,
     backgroundColor: 'transparent',
-    padding: 8,
-    borderRadius:16,
-    height: 72,
+    padding: 6,
+    borderRadius: 14,
+    height: 64,
   },
   amountInput: {
     flex: 1,
@@ -1450,16 +1559,14 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
   convertButtonWrapper: {
-    marginTop: 24,
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     zIndex: 1,
   },
   convertButton: {
-    height: 50,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
   },
   historyContainer: {
     flex: 1,
@@ -1748,20 +1855,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   calculatorContainer: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '75%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
+    paddingBottom: Platform.OS === 'android' ? 20 : 0,
   },
   calculatorModalOverlay: {
     flex: 1,
@@ -1775,14 +1875,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '75%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
+    paddingBottom: Platform.OS === 'android' ? 20 : 0,
   },
   calculatorHeader: {
     flexDirection: 'row',
@@ -1801,55 +1894,68 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   settingsDialog: {
-    width: 400,
+    width: '90%',
+    maxWidth: 400,
     alignSelf: 'center',
+    borderRadius: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
   },
   settingsSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   settingsLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    opacity: 0.8,
   },
   settingsItem: {
-    borderRadius: 12,
-    marginVertical: 4,
+    borderRadius: 16,
+    marginVertical: 6,
     overflow: 'hidden',
+    elevation: 0,
   },
   settingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   settingsText: {
     fontSize: 16,
+    fontWeight: '500',
     flex: 1,
+    lineHeight: 22,
   },
   switchContainer: {
-    width: 48,
-    height: 28,
-    borderRadius: 14,
+    width: 51,
+    height: 31,
+    borderRadius: 15.5,
     padding: 2,
     justifyContent: 'center',
   },
   switchToggle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 27,
+    height: 27,
+    borderRadius: 13.5,
     position: 'absolute',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.15,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
 });

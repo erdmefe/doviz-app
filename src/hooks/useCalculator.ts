@@ -198,6 +198,8 @@ export const useCalculator = (onResultChange?: (value: string) => void) => {
 
   return {
     display: state.display,
+    previousValue: state.previousValue,
+    operation: state.operation,
     handleNumber,
     handleOperator,
     handleEquals,
